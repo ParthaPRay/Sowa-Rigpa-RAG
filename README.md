@@ -77,7 +77,7 @@ pip install -r requirements.txt
 ### Run locally
 
 ```bash
-python sowa_rigpa_rag.py
+python sowarigpa.py
 ```
 
 Access the Gradio UI at:
@@ -136,7 +136,7 @@ This project is licensed under the MIT License.
 
 ---
 
-⚡ I kept it **professional + research-oriented** while making it **developer-friendly** with badges, mermaid diagram, and clear steps.  
+⚡ I kept it professional + research-oriented while making it developer-friendly with badges, mermaid diagram, and clear steps.  
 
-Do you want me to also prepare a **`requirements.txt`** file (with the correct package versions: `docling`, `langchain`, `pymilvus`, `gradio`, etc.) so your repo is immediately runnable?
+Do you want me to also prepare a `requirements.txt` file (with the correct package versions: `docling`, `langchain`, `pymilvus`, `gradio`, etc.) so your repo is immediately runnable?
 
