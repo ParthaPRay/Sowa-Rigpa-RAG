@@ -113,7 +113,7 @@ Access the Gradio UI at:
 
 ## 🔮 Future Directions
 
-* Expand multilingual support (Tibetan, Hindi, English)
+* Expand multilingual support (Hindi, English and more)
 * IoT integration for climate/ecology-aware advice
 * Patient-centered health advisory tools
 * Cross-domain adaptation for **Ayurveda, Siddha, Unani**
