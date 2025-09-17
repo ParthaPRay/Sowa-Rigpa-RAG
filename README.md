@@ -1,6 +1,4 @@
 
-
-````markdown
 # 🌿 Sowa-Rigpa RAG  
 *An Indigenous Knowledge–Centered AI Stack for Sustainable Health Futures*
 
@@ -141,4 +139,4 @@ This project is licensed under the MIT License.
 ⚡ I kept it **professional + research-oriented** while making it **developer-friendly** with badges, mermaid diagram, and clear steps.  
 
 Do you want me to also prepare a **`requirements.txt`** file (with the correct package versions: `docling`, `langchain`, `pymilvus`, `gradio`, etc.) so your repo is immediately runnable?
-```
+
