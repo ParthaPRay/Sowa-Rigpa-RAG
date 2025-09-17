@@ -1,6 +1,4 @@
-Here’s a **GitHub README.md** draft in Markdown style for your project, polished for academic + developer visibility:
 
----
 
 ````markdown
 # 🌿 Sowa-Rigpa RAG  
