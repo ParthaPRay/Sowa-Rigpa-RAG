@@ -1,0 +1,8 @@
+gradio 
+docling 
+docling-core 
+pymilvus 
+langchain 
+langchain-ollama 
+requests
+transformers
