@@ -96,6 +96,11 @@ if _device not in ("CUDA", "CPU", "AUTO"):
     _device = "AUTO"
 
 # -----------------------------
+# NEW: Global to capture last successful ingestion (chunk-extraction) duration
+# -----------------------------
+LAST_INGEST_CHUNK_NS = 0
+
+# -----------------------------
 # Utils
 # -----------------------------
 def sha256_bytes(b: bytes) -> str:
@@ -276,12 +281,15 @@ def ingest_bytes(
     file_bytes: bytes,
     source_name: str,
 ) -> Tuple[bool, str]:
+    global LAST_INGEST_CHUNK_NS
     reg = load_registry()
     doc_id = sha256_bytes(file_bytes)
 
     # dedupe **per collection**
     coll_docs = _get_coll_docs(reg, collection_name)
     if doc_id in coll_docs:
+        # No new ingestion performed -> ensure metric is 0
+        LAST_INGEST_CHUNK_NS = 0
         meta = coll_docs[doc_id]
         return False, f"✅ Already indexed in [{collection_name}]: {source_name} (chunks={meta.get('chunks', 0)})"
 
@@ -294,9 +302,13 @@ def ingest_bytes(
         f.write(file_bytes)
 
     try:
-        # Chunk extraction
+        # Chunk extraction with timing
+        t0 = time.time_ns()
         chunks = extract_chunks_any(tmp_path)
+        chunk_extract_ns = time.time_ns() - t0
+
         if not chunks:
+            LAST_INGEST_CHUNK_NS = 0
             return False, f"⚠️ No text content extracted from {source_name}"
 
         # Embed
@@ -325,9 +337,14 @@ def ingest_bytes(
             "ingested_at": int(time.time()),
         }
         save_registry(reg)
+
+        # Record last successful ingestion chunking duration
+        LAST_INGEST_CHUNK_NS = int(chunk_extract_ns)
+
         return True, f"✅ Indexed {len(chunks)} chunks into [{collection_name}] from {source_name}"
 
     except Exception as e:
+        LAST_INGEST_CHUNK_NS = 0
         return False, friendly_err(e)
     finally:
         try:
@@ -479,6 +496,9 @@ def append_metrics_csv(
         "eval_count",
         "eval_duration_ns",
         "tokens_per_second",
+        # NEW columns:
+        "ingest_chunking_duration_ns",
+        "retrieval_duration_ns",
     ]
     row = {
         "timestamp": ts,
@@ -493,6 +513,9 @@ def append_metrics_csv(
         "eval_count": metrics.get("eval_count"),
         "eval_duration_ns": metrics.get("eval_duration_ns"),
         "tokens_per_second": metrics.get("tokens_per_second"),
+        # NEW values:
+        "ingest_chunking_duration_ns": metrics.get("ingest_chunking_duration_ns"),
+        "retrieval_duration_ns": metrics.get("retrieval_duration_ns"),
     }
     with open(csv_path, "a", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(
@@ -516,12 +539,26 @@ def answer_query(
     if not question or not question.strip():
         return "Please enter a question.", "{}", "—"
 
+    # NEW: measure retrieval duration around retrieve_context()
+    t0_retr = time.time_ns()
     contexts = retrieve_context(mclient, embedder, collection_name, question.strip(), k)
+    retrieval_ns = int(time.time_ns() - t0_retr)
+
     prompt = build_prompt(question, contexts)
     try:
         answer, metrics = call_ollama_generate(model=model, prompt=prompt, temperature=temperature)
     except Exception as e:
-        return friendly_err(e), "{}", format_sources(contexts)
+        # Even on failure, show retrieval timing in metrics JSON for transparency
+        err_metrics = {
+            "error": friendly_err(e),
+            "ingest_chunking_duration_ns": int(globals().get("LAST_INGEST_CHUNK_NS", 0)),
+            "retrieval_duration_ns": retrieval_ns,
+        }
+        return friendly_err(e), json.dumps(err_metrics, indent=2), format_sources(contexts)
+
+    # NEW: attach ingestion chunking (if any since last ingestion) + retrieval timing
+    metrics["ingest_chunking_duration_ns"] = int(globals().get("LAST_INGEST_CHUNK_NS", 0))
+    metrics["retrieval_duration_ns"] = retrieval_ns
 
     ts = int(time.time())
 
@@ -549,6 +586,10 @@ def answer_query(
     except Exception as e:
         print(f"[CSV logging error] {friendly_err(e)}")
 
+    # IMPORTANT: reset the ingestion chunking duration after logging,
+    # so subsequent queries without new ingestion log 0 as requested.
+    globals()["LAST_INGEST_CHUNK_NS"] = 0
+
     return answer, json.dumps(metrics, indent=2), format_sources(contexts)
 
 # -----------------------------
@@ -556,7 +597,11 @@ def answer_query(
 # -----------------------------
 def build_ui(mclient: MilvusClient, embedder: LC_OllamaEmbeddings, collection_name: str):
     with gr.Blocks(theme=gr.themes.Soft()) as demo:
-        gr.Markdown("## 🌿 Sowa-Rigpa RAG — Docling Hybrid Chunking + Ollama + Milvus")
+        gr.Markdown("## 🌿 Sowa-Rigpa RAG — AI Enabled Indigenous IKS Framework")
+        gr.Markdown(
+            "Developer: **Partha Pratim Ray**, Department of Computer Applications, "
+            "Sikkim University, Sikkim, India"
+        )
 
         with gr.Tab("Ask"):
             q = gr.Textbox(label="Ask a Sowa-Rigpa question", placeholder="e.g., What are the three nyes-pa (humors)?")
@@ -566,7 +611,7 @@ def build_ui(mclient: MilvusClient, embedder: LC_OllamaEmbeddings, collection_na
                 k = gr.Slider(1, 10, value=TOP_K_DEFAULT, step=1, label="Top-K retrieved")
             ask_btn = gr.Button("Ask", variant="primary")
             answer = gr.Textbox(label="Answer", lines=10)
-            metrics = gr.Textbox(label="Ollama Metrics (JSON)", lines=10)
+            metrics = gr.Textbox(label="Ollama Metrics (JSON) + Extraction/Retrieval", lines=10)
             sources = gr.Textbox(label="Retrieved Sources")
 
             ask_btn.click(
@@ -626,3 +671,4 @@ if __name__ == "__main__":
 
     app = build_ui(mclient, embedder, collection_name)
     app.launch(server_name="0.0.0.0", server_port=7860)
+
